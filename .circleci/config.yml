@@ -1,0 +1,87 @@
+version: 2
+jobs:
+  build:
+    parallelism: 6
+    docker:
+      # specify the version you desire here
+      - image: circleci/ruby:2.6.3-node-browsers
+      - image: circleci/postgres:9.6.2
+    working_directory: ~/my_app
+    environment:
+      TZ: "/usr/share/zoneinfo/America/New_York"
+      RAILS_ENV: "test"
+      RACK_ENV: "test"
+
+    steps:
+      - checkout
+
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+            - gem-cache-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
+            - gem-cache-{{ checksum "Gemfile.lock" }}
+            - gem-cache
+
+      # Enable if using yarn
+      - restore_cache:
+          keys:
+            - challenger-yarn-deps-{{ .Branch }}-{{ checksum "yarn.lock" }}
+            - challenger-yarn-deps-{{ .Branch }}
+            - challenger-yarn-deps
+
+      - run: bundle check --path=vendor/bundle || bundle install --path=vendor/bundle --jobs=4 --retry=3
+      # Enable if using yarn
+      - run: bin/yarn install
+
+      # Store bundle cache
+      - save_cache:
+          key: gem-cache-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
+          paths:
+            - vendor/bundle
+      - save_cache:
+          key: gem-cache-{{ checksum "Gemfile.lock" }}
+          paths:
+            - vendor/bundle
+      - save_cache:
+          key: gem-cache
+          paths:
+            - vendor/bundle
+
+      # Store yarn cache: When using Yarn
+      - save_cache:
+          key: challenger-yarn-deps-{{ .Branch }}-{{ checksum "yarn.lock" }}
+          paths:
+            - vendor/node_modules
+      - save_cache:
+          key: challenger-yarn-deps-{{ .Branch }}
+          paths:
+            - vendor/node_modules
+      - save_cache:
+          key: challenger-yarn-deps
+          paths:
+            - vendor/node_modules
+
+      - run: mkdir reports
+
+      # Database setup
+      - run: cp config/database.yml.ci config/database.yml
+      - run: bundle exec rake db:create db:schema:load --trace
+      # Enable if using yarn
+      - run: bin/yarn install
+      - run: bin/webpack
+      - run: bundle exec rails webpacker:compile
+
+      # Unit tests
+      - run:
+          shell: /bin/bash
+          command: bundle exec rake test --trace
+
+      # Bundler audit
+      - run:
+          shell: /bin/bash
+          command: bundle exec bundle-audit check --update
+workflows:
+  version: 2
+  commit:
+    jobs:
+      - build
