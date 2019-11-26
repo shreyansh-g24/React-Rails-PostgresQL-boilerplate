@@ -6,9 +6,9 @@ default: &default
 
 development:
   <<: *default
-  database: my_app
+  database: my_app_development
 
 test:
   <<: *default
   user: postgres
-  database: my_app<%= ENV['CIRCLE_NODE_INDEX'] %>
+  database: my_app_test<%= ENV['CIRCLE_NODE_INDEX'] %>
